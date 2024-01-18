@@ -30,3 +30,6 @@ venv/
 # OS-specific files
 .DS_Store
 Thumbs.db
+
+# Project specific files
+test_output*
