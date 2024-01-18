@@ -87,13 +87,12 @@ class MachiningPositions:
     def vertices(self):
         vor = Voronoi(self.envelope_sampling)
         inside_vertices = []
-        inside_vertices_distance = []
         for vertex in vor.vertices:
             if self.polygon_envelope.contains(Point(vertex)):
                 inside_vertices.append(vertex)
         inside_vertices = np.array(inside_vertices)
 
-        return inside_vertices, inside_vertices_distance
+        return inside_vertices
 
     @cached_property
     def ordered_vertices(self):
@@ -126,15 +125,15 @@ class MachiningPositions:
             ]
             current_distances.append(next_distance)
             if next_distance > 5 * sum(current_distances) / len(current_distances):
-                ordered_points_all.append(ordered_points_subset)
+                ordered_points_all.append(np.array(ordered_points_subset))
                 ordered_points_subset = []
                 current_distances = []
             ordered_points_subset.append(next_point)
             start_point = next_point
-        ordered_points_all.append(ordered_points_subset)
+        ordered_points_all.append(np.array(ordered_points_subset))
         return ordered_points_all
 
-    def distance_to_envlope(self, points: np.ndarray) -> np.ndarray:
+    def distance_to_envelope(self, points: np.ndarray) -> np.ndarray:
         return np.array(
             [self.linestring_envelope.distance(Point(point)) for point in points]
         )
@@ -143,7 +142,7 @@ class MachiningPositions:
     def dataframe(self) -> pd.DataFrame:
         dataframe_list = []
         for ordered_vertices_subset in self.ordered_vertices:
-            inside_vertices_distance = self.distance_to_envlope(ordered_vertices_subset)
+            inside_vertices_distance = self.distance_to_envelope(ordered_vertices_subset)
             dataframe_list.append(
                 self.dataframe_from_machining_positions_and_distances(
                     ordered_vertices_subset, inside_vertices_distance
@@ -168,7 +167,7 @@ class MachiningPositions:
         cls, inside_vertices, inside_vertices_distance
     ):
         first_line_df = pd.DataFrame()
-        first_line_df["type"] = "0"
+        first_line_df["type"] = ["0"]
         first_line_df["x"] = inside_vertices[0, 0]
         first_line_df["y"] = inside_vertices[0, 1]
         first_line_df["z"] = cls.z_0
@@ -180,7 +179,7 @@ class MachiningPositions:
         middle_df["type"] = "1"
 
         last_line_df = pd.DataFrame()
-        last_line_df["type"] = "0"
+        last_line_df["type"] = ["0"]
         last_line_df["x"] = inside_vertices[-1, 0]
         last_line_df["y"] = inside_vertices[-1, 1]
         last_line_df["z"] = cls.z_0
