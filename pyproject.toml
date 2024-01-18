@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "machining-positions"
+version = "0.1.0"
+description = "Application for finding machining positions."
+authors = ["Clément Côme <clement.come98@gmail.com>"]
+readme = "README.md"
+packages = [{include = "machining_positions"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+numpy = "^1.26.3"
+pandas = "^2.1.4"
+bezier = "^2023.7.28"
+SciPy = "^1.11.4"
+shapely = "^2.0.2"
+plotly = "^5.18.0"
+tqdm = "^4.66.1"
+pyqt6 = "^6.6.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
