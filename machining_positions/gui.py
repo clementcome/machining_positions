@@ -116,7 +116,7 @@ class App(QWidget):
         input_path = self.inputPathEdit.text()
         output_folder = self.outputFolderEdit.text()
         num_points = int(self.numPointsEdit.text())
-        resolution = int(self.resolutionEdit.text())
+        resolution = float(self.resolutionEdit.text())
 
         self.tqdm_signal = TqdmSignal()
         self.tqdm_signal.update_progress.connect(self.updateProgress)

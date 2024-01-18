@@ -7,12 +7,11 @@ def generate_plot(envelope_array_df: pd.DataFrame, machining_positions_df: pd.Da
 
     for shape in machining_positions_df["shape"].unique():
         mask_shape = machining_positions_df["shape"] == shape
-        n_sample = int(0.2 * mask_shape.sum())
-        machining_positions_shape = machining_positions_df[mask_shape].sample(n_sample)
+        machining_positions_shape = machining_positions_df[mask_shape]
         fig.add_scatter(
             x=machining_positions_shape["x"],
             y=machining_positions_shape["y"],
-            mode="markers",
+            mode="lines",
         )
     fig.update_yaxes(
         scaleanchor="x",

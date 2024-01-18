@@ -3,81 +3,58 @@ import numpy as np
 import pandas as pd
 import bezier
 from scipy.spatial import Voronoi, distance as scipy_distance
-from shapely import Polygon, Point, distance, LineString
+from shapely import Polygon, Point, distance, LineString, MultiLineString
 from typing import List, Literal
 from svgpathtools.path import Path
 
 
-def envelope_from_excel_points(points, num_points):
-    bezier_curve_list = [
-        bezier.Curve(
-            bezier_points,
-            degree=3,
-        )
-        for bezier_points in points
-    ]
+def polygon_from_svg_points(path: Path, num_points: int):
     array_0_1 = np.linspace(0, 1, num_points)
-    bezier_evaluation_list = []
-    for bezier_curve in bezier_curve_list:
-        bezier_evaluation_list.append(bezier_curve.evaluate_multi(array_0_1).T)
-    envelope_array = np.concatenate(bezier_evaluation_list)
-    return envelope_array
-
-
-def envelope_from_svg_points(path: Path, num_points: int):
-    array_0_1 = np.linspace(0, 1, num_points)
+    envelope_points_all = []
     envelope_points = []
+    last_end = path[0].start
     for shape in path:
+        if shape.start != last_end:
+            envelope_points_all.append(
+                np.array(
+                    [
+                        [point.real, point.imag]
+                        for point in np.concatenate(envelope_points)
+                    ]
+                )
+            )
+            envelope_points = []
         try:
             envelope_points.append(shape.points(array_0_1))
         except AttributeError:
             envelope_points.append([shape.point(value) for value in array_0_1])
-    envelope_array = np.concatenate(envelope_points)
-    # Convert numpy array of complex numbers to array of arrays of floats (x, y)
-    envelope_array = np.array([[point.real, point.imag] for point in envelope_array])
-    return envelope_array
-
-
-def machining_positions_and_distances_from_envelope(envelope_array, resolution=1):
-    polygon_evaluations = Polygon(envelope_array)
-    linestring_evaluations = LineString(envelope_array)
-    evaluations_list = [
-        linestring_evaluations.line_interpolate_point(step)
-        for step in np.arange(0, linestring_evaluations.length, resolution)
-    ]
-    evaluations_array = np.array([[point.x, point.y] for point in evaluations_list])
-    vor = Voronoi(evaluations_array)
-    inside_vertices = []
-    inside_vertices_distance = []
-    for vertex in vor.vertices:
-        point = Point(vertex)
-        if polygon_evaluations.contains(Point(vertex)):
-            inside_vertices.append(vertex)
-            inside_vertices_distance.append(distance(point, linestring_evaluations))
-    inside_vertices = np.array(inside_vertices)
-    inside_vertices_distance = np.array(inside_vertices_distance)
-    return inside_vertices, inside_vertices_distance
+        last_end = shape.end
+    envelope_points_all.append(
+        np.array(
+            [[point.real, point.imag] for point in np.concatenate(envelope_points)]
+        )
+    )
+    polygon_with_holes = Polygon(envelope_points_all[0], envelope_points_all[1:])
+    return polygon_with_holes
 
 
 class MachiningPositions:
     z_0 = 5
 
-    def __init__(self, envelope_array: np.ndarray, resolution: float = 1) -> None:
-        self.envelope_array = envelope_array
+    def __init__(self, polygon: Polygon, resolution: float = 1) -> None:
+        self.polygon_envelope = polygon
         self.resolution = resolution
 
     @cached_property
-    def polygon_envelope(self):
-        return Polygon(self.envelope_array)
-
-    @cached_property
     def linestring_envelope(self):
-        return LineString(self.envelope_array)
-    
+        return MultiLineString(
+            [self.polygon_envelope.exterior, *self.polygon_envelope.interiors]
+        )
+
     @cached_property
     def envelope_sampling(self):
         evaluations_list = [
-            self.linestring_envelope.line_interpolate_point(step)
+            self.linestring_envelope.interpolate(step)
             for step in np.arange(0, self.linestring_envelope.length, self.resolution)
         ]
         evaluations_array = np.array([[point.x, point.y] for point in evaluations_list])
@@ -115,7 +92,8 @@ class MachiningPositions:
         search_positions = vertices[np.arange(len(vertices)) != start_index]
         ordered_points_all = []
         ordered_points_subset = [start_point]
-        current_distances = []
+        mean_distance = None
+        n_mean = 0
         while len(search_positions) > 0:
             next_point, next_index, next_distance = cls.closest_point(
                 start_point, search_positions
@@ -123,11 +101,16 @@ class MachiningPositions:
             search_positions = search_positions[
                 np.arange(len(search_positions)) != next_index
             ]
-            current_distances.append(next_distance)
-            if next_distance > 5 * sum(current_distances) / len(current_distances):
+            if n_mean == 0:
+                mean_distance = next_distance
+                n_mean = 1
+            elif (n_mean < 10) or(next_distance < 5 * mean_distance):
+                mean_distance = (n_mean * mean_distance + next_distance) / (n_mean + 1)
+                n_mean += 1
+            else:
                 ordered_points_all.append(np.array(ordered_points_subset))
                 ordered_points_subset = []
-                current_distances = []
+
             ordered_points_subset.append(next_point)
             start_point = next_point
         ordered_points_all.append(np.array(ordered_points_subset))
@@ -142,7 +125,9 @@ class MachiningPositions:
     def dataframe(self) -> pd.DataFrame:
         dataframe_list = []
         for ordered_vertices_subset in self.ordered_vertices:
-            inside_vertices_distance = self.distance_to_envelope(ordered_vertices_subset)
+            inside_vertices_distance = self.distance_to_envelope(
+                ordered_vertices_subset
+            )
             dataframe_list.append(
                 self.dataframe_from_machining_positions_and_distances(
                     ordered_vertices_subset, inside_vertices_distance
